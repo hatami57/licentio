@@ -8,7 +8,7 @@ defmodule Licentio.Schema.Tenant do
   schema "tenants" do
     field :name, :string
     field :code, :string
-    field :id_active, :boolean, default: true
+    field :is_active, :boolean, default: true
     field :metadata, :map, default: %{}
 
     has_many :features, Licentio.Schema.Feature
