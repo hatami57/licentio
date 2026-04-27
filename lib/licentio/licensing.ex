@@ -5,7 +5,7 @@ defmodule Licentio.Licensing do
 
   import Ecto.Query
 
-  alias Phoenix.LiveView.Lifecycle
+  alias Licentio.Cache
   alias Ecto.Multi
   alias Licentio.Repo
   alias Licentio.Schema.{User, License, LicenseFeature, Plan, PlanFeature}
@@ -85,6 +85,21 @@ defmodule Licentio.Licensing do
   end
 
   @doc """
+  Fast cache-first access check.
+  Falls back to DB if user not in cache yet.
+  """
+  def has_access_cached?(tenant_id, user_id, feature_code) do
+    case Cache.Store.get_feature(user_id, feature_code) do
+      nil ->
+        Cache.TenantServer.load_user(tenant_id, user_id)
+        has_access?(user_id, feature_code)
+
+      fd ->
+        check_cached_access(fd)
+    end
+  end
+
+  @doc """
   Checks whether a user has access to a specific feature.
 
   For boolean features -> true if the feature exists in their license
@@ -119,6 +134,26 @@ defmodule Licentio.Licensing do
   # --------------------------
   # Usage tracking
   # --------------------------
+
+  @doc "Consume via GenServer (serialized, DB + cache updated atomically)."
+  def consume_cached(tenant_id, user_id, feature_code, raw_amount) do
+    with %{} = fd <- Cache.Store.get_feature(user_id, feature_code),
+         units <- convert_to_units(raw_amount, fd.unit_size) do
+      Cache.TenantServer.consume(tenant_id, user_id, feature_code, units)
+    else
+      nil -> {:error, :feature_not_found}
+    end
+  end
+
+  @doc "Reclaim via GenServer."
+  def reclaim_cached(tenant_id, user_id, feature_code, raw_amount) do
+    with %{} = fd <- Cache.Store.get_feature(user_id, feature_code),
+         units <- convert_to_units(raw_amount, fd.unit_size) do
+      Cache.TenantServer.reclaim(tenant_id, user_id, feature_code, units)
+    else
+      nil -> {:error, :feature_not_found}
+    end
+  end
 
   @doc """
   Consumes `raw_amount` units of a metric feature for a user.
@@ -407,4 +442,12 @@ defmodule Licentio.Licensing do
   defp duration_in_seconds(days: d), do: d * 86_400
   defp duration_in_seconds(months: m), do: m * 30 * 86_400
   defp duration_in_seconds(years: y), do: y * 365 * 86_400
+
+  # ------------------------------
+  # Private - cache check
+  # ------------------------------
+
+  defp check_cached_access(%{feature_type: "boolean"}), do: true
+  defp check_cached_access(%{is_unlimited: true}), do: true
+  defp check_cached_access(fd), do: fd.granted_value - fd.used_value > 0
 end

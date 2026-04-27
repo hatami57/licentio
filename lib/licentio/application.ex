@@ -7,14 +7,15 @@ defmodule Licentio.Application do
 
   @impl true
   def start(_type, _args) do
+    Licentio.Cache.Store.init_tables()
+
     children = [
       LicentioWeb.Telemetry,
       Licentio.Repo,
       {DNSCluster, query: Application.get_env(:licentio, :dns_cluster_query) || :ignore},
       {Phoenix.PubSub, name: Licentio.PubSub},
-      # Start a worker by calling: Licentio.Worker.start_link(arg)
-      # {Licentio.Worker, arg},
-      # Start to serve requests, typically the last entry
+      {Registry, keys: :unique, name: Licentio.TenantRegistry},
+      Licentio.Cache.TenantSupervisor,
       LicentioWeb.Endpoint
     ]
 
