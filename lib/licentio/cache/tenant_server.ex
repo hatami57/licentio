@@ -118,7 +118,7 @@ defmodule Licentio.Cache.TenantServer do
   @impl true
   def handle_info(:check_ttl, state) do
     evict_stale_users()
-    sechedule_ttl_check()
+    schedule_ttl_check()
     {:noreply, state}
   end
 
