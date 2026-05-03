@@ -3,10 +3,34 @@ defmodule LicentioWeb.Router do
 
   pipeline :api do
     plug :accepts, ["json"]
+    plug LicentioWeb.Plugs.LoadTenant
   end
 
   scope "/api", LicentioWeb do
     pipe_through :api
+
+    resources "/tenants", TenantController, only: [:create, :show]
+
+    scope "/tenants/:tenant_id" do
+      resources "/features", FeatureController, only: [:index, :create]
+
+      resources "/features", FeatureController, only: [:index, :create]
+
+      resources "/plans", PlanController, only: [:index, :create] do
+        post "/features", PlanController, :add_feature
+        post "/prices", PlanController, :add_price
+      end
+
+      scope "/users/:user_id" do
+        post "/", UserController, :register
+        get "/license", LicenseController, :show
+        post "/license", LicenseController, :grant
+
+        get "/features/:code", AccessController, :check
+        post "/features/:code/consume", AccessController, :consume
+        post "/features/:code/reclaim", AccessController, :reclaim
+      end
+    end
   end
 
   # Enable LiveDashboard in development
